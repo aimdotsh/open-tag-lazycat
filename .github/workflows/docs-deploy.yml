@@ -1,0 +1,41 @@
+name: Validate bundled documentation
+
+# Documentation is served by each self-hosted installation at /docs/.
+# This workflow validates the static build; it does not claim or deploy the
+# original maintainer's documentation domain.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs-site/**"
+      - "web/src/landing/publicNav.ts"
+      - ".github/workflows/docs-deploy.yml"
+  pull_request:
+    paths:
+      - "docs-site/**"
+      - "web/src/landing/publicNav.ts"
+      - ".github/workflows/docs-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: docs-site/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+        working-directory: docs-site
+
+      - name: Build and verify bundled docs
+        run: npm run build
+        working-directory: docs-site

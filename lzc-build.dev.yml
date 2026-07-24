@@ -1,0 +1,3 @@
+# Added by f00700f for the community-maintained LazyCat distribution, 2026.
+package_override:
+  package: cloud.lazycat.app.open-tag.dev

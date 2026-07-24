@@ -1,0 +1,50 @@
+name: Build self-hosted open-tag daemon archive
+
+# The community distribution does not publish to npmjs.com. A GitHub release
+# receives the same fixed-version tarball that LazyCat installations serve.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Generate license inventory and build daemon
+        run: |
+          npm run licenses:generate
+          npm run pkg:daemon:build
+
+      - name: Pack fixed-version archive
+        run: |
+          mkdir -p release
+          npm pack ./packages/daemon --pack-destination release
+          cd release
+          sha256sum ./*.tgz > SHA256SUMS
+
+      - name: Upload archive to GitHub release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" release/* --clobber
+
+      - name: Preserve workflow artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: open-tag-daemon
+          path: release/

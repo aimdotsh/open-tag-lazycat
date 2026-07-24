@@ -1,0 +1,4 @@
+# Added by f00700f for the community-maintained LazyCat distribution, 2026.
+manifest: ./lzc-manifest.yml
+pkgout: ./dist
+icon: ./icon.png

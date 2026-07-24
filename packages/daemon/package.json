@@ -1,0 +1,44 @@
+{
+  "name": "@f00700f/open-tag-daemon",
+  "version": "0.9.1",
+  "private": true,
+  "description": "open-tag compute-plane daemon — connect any machine to an open-tag server so its agents run there. No repo clone needed.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "open-tag-daemon": "dist/cli.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "UPSTREAM.md",
+    "MODIFICATIONS.md",
+    "THIRD_PARTY_NOTICES.md",
+    "THIRD_PARTY_PACKAGES.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "open-tag",
+    "ai-agents",
+    "daemon",
+    "self-hosted"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aimdotsh/open-tag-lazycat.git",
+    "directory": "packages/daemon"
+  },
+  "homepage": "https://github.com/aimdotsh/open-tag-lazycat/tree/main/packages/daemon#readme",
+  "bugs": {
+    "url": "https://github.com/aimdotsh/open-tag-lazycat/issues"
+  },
+  "author": "The open-tag authors",
+  "contributors": [
+    "fancyboi999 (original project)",
+    "f00700f (LazyCat distribution)"
+  ]
+}

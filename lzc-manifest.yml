@@ -1,0 +1,86 @@
+# Community-maintained LazyCat distribution by f00700f.
+usage: |
+  【中文】
+  open-tag 社区版的控制面由懒猫微服托管，并使用懒猫账号免密登录。
+
+  要运行 Codex、Claude Code、Pi 等 Agent，请在应用商店安装 LightOS，创建一个仅供 open-tag 使用的实例，安装 Node.js 20+ 和需要的 Agent CLI。在 open-tag 的“设置 → 计算机”中生成一次性显示的 machine key，然后复制页面生成的一键命令执行。命令使用当前应用域名下载固定版本 daemon，不访问 npmjs.com：
+    npx --yes --package="https://{{ .S.AppDomain }}/downloads/f00700f-open-tag-daemon-0.9.1.tgz" -- open-tag-daemon --server-url "https://{{ .S.AppDomain }}" --api-key sk_machine_xxx
+  连接成功后可按应用文档将 daemon 配置为 systemd 常驻服务。machine key 等同于设备凭据，请勿截图、转发或写入公开文件；泄露后请立即在应用中重连并轮换。
+
+  数据库、Redis 和附件都保存在应用的持久目录。升级前仍建议备份 PostgreSQL 与 Agent 工作区。
+
+  【English】
+  The community edition uses LazyCat OIDC for passwordless sign-in. To run agents, prepare a dedicated LightOS instance or trusted computer with Node.js 20+ and a supported agent CLI. Open Settings → Computers, generate a machine key, and copy the one-line command shown by the app. It downloads the pinned daemon tarball from this installation and does not use npmjs.com.
+
+  Treat the machine key as a device credential. Do not share it or include it in screenshots. Rotate it immediately through Reconnect if exposed. Back up PostgreSQL and agent workspaces before upgrading.
+
+application:
+  subdomain: open-tag
+  background_task: true
+  oidc_redirect_path: /api/auth/lazycat/callback
+  routes:
+    - /=http://opentag:7788
+  public_path:
+    - /daemon/connect
+    - /agent-api/
+    - /downloads/f00700f-open-tag-daemon-0.9.1.tgz
+
+services:
+  postgres:
+    image: registry.lazycat.cloud/postgres:18.1
+    binds:
+      - /lzcapp/var/postgres:/var/lib/postgresql
+    environment:
+      - POSTGRES_USER=opentag
+      - POSTGRES_PASSWORD={{ stable_secret "open-tag-postgres-password" }}
+      - POSTGRES_DB=opentag
+      - TZ=Australia/Perth
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opentag -d opentag"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: registry.lazycat.cloud/redis:8.0
+    command: redis-server --appendonly yes
+    binds:
+      - /lzcapp/var/redis:/data
+    environment:
+      - TZ=Australia/Perth
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  opentag:
+    image: registry.lazycat.cloud/f007/f00700f/open-tag-lazycat:577d74e433552bd5
+    depends_on:
+      - postgres
+      - redis
+    setup_script: |
+      mkdir -p /home/node/.open-tag/uploads
+      chown -R 1000:1000 /home/node/.open-tag
+    binds:
+      - /lzcapp/var/open-tag:/home/node/.open-tag
+    environment:
+      - DATABASE_URL=postgres://opentag:{{ stable_secret "open-tag-postgres-password" }}@postgres:5432/opentag
+      - REDIS_URL=redis://redis:6379
+      - PORT=7788
+      - JWT_SECRET={{ stable_secret "open-tag-jwt-secret" }}
+      - DAEMON_BOOTSTRAP_KEY={{ stable_secret "open-tag-daemon-bootstrap-key" }}
+      - OPEN_TAG_HOME=/home/node/.open-tag
+      - OPEN_TAG_UPLOAD_DIR=/home/node/.open-tag/uploads
+      - ALLOW_DEV_LOGIN=false
+      - LAZYCAT_OIDC_ENABLED=true
+      - LAZYCAT_OIDC_ISSUER=${LAZYCAT_AUTH_OIDC_ISSUER_URI}
+      - LAZYCAT_OIDC_CLIENT_ID=${LAZYCAT_AUTH_OIDC_CLIENT_ID}
+      - LAZYCAT_OIDC_CLIENT_SECRET=${LAZYCAT_AUTH_OIDC_CLIENT_SECRET}
+      - LAZYCAT_OIDC_AUTH_URI=${LAZYCAT_AUTH_OIDC_AUTH_URI}
+      - LAZYCAT_OIDC_TOKEN_URI=${LAZYCAT_AUTH_OIDC_TOKEN_URI}
+      - LAZYCAT_OIDC_USERINFO_URI=${LAZYCAT_AUTH_OIDC_USERINFO_URI}
+      - LAZYCAT_OIDC_REDIRECT_URL=https://{{ .S.AppDomain }}/api/auth/lazycat/callback
+      - ALLOWED_ORIGIN=https://{{ .S.AppDomain }}
+      - TRUST_PROXY=true
+      - TZ=Australia/Perth

@@ -1,0 +1,24 @@
+open-tag
+Copyright 2026 The open-tag authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this project except in compliance with the License.
+A copy of the License is provided in the LICENSE file.
+
+open-tag is an independent implementation. It is not affiliated with,
+sponsored by, or endorsed by Anthropic. "Claude" and "Claude Tag" are
+trademarks of Anthropic, referenced only to describe interoperability
+and positioning.
+
+Community-maintained LazyCat distribution
+Copyright 2026 f00700f contributors
+
+This distribution is based on an open-tag source snapshot whose provenance is
+recorded in UPSTREAM.md. The original repository was
+https://github.com/fancyboi999/open-tag and was unavailable when this
+community distribution was prepared.
+
+The LazyCat packaging, LazyCat OIDC integration, self-hosted daemon tarball
+delivery, documentation, and related compatibility changes were added by
+f00700f contributors. This community distribution is not an official release
+of, or endorsed by, the original open-tag maintainer.

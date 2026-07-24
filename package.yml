@@ -1,0 +1,18 @@
+# Community-maintained LazyCat distribution by f00700f, based on the upstream
+# open-tag source snapshot identified in UPSTREAM.md.
+package: f00700f.open-tag
+version: 1.0.18
+name: open-tag 社区版
+description: 基于 open-tag 的社区维护版，在频道、话题和任务中与本地 AI Agent 协作
+author: f00700f
+license: Apache-2.0
+homepage: https://github.com/aimdotsh/open-tag-lazycat
+locales:
+  zh-CN:
+    name: open-tag 社区版
+    description: 基于 open-tag 的社区维护版，在频道、话题和任务中与本地 AI Agent 协作
+  en-US:
+    name: open-tag Community Edition
+    description: Community-maintained open-tag workspace for people and local AI agents
+permissions:
+  required: []
