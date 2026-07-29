@@ -11,6 +11,17 @@ repository are retained below as provenance.
 
 ## [Unreleased]
 
+## LazyCat app 1.0.19 — 2026-07-29
+
+### Security
+
+- Bound application JWTs, attachment downloads, and Socket.IO connections to the
+  currently authenticated LazyCat ingress account, preventing a browser token
+  from surviving a microserver account switch.
+- Stopped automatically adding `NORMAL` LazyCat accounts to the seeded
+  administrator workspace. Existing unintended memberships are removed once
+  on the next login and each user receives an isolated personal workspace.
+
 ## LazyCat app 1.0.18 — 2026-07-24
 
 ### Changed

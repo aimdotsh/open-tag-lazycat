@@ -94,11 +94,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const subscribedRef = useRef<Set<string>>(new Set()); // channels/threads explicitly subscribed by the active view; re-emitted on every (re)connect so a reconnect re-joins them
   const listeners = useRef(new Set<(e: Ev) => void>());
 
+  const expireSession = () => {
+    localStorage.removeItem(TOKEN_KEY);
+    tokenRef.current = "";
+    sockRef.current?.close();
+    window.location.replace("/login?lazycat_error=account_changed");
+  };
   const api = async (method: string, path: string, body?: unknown) => {
     // Race condition on first render: views may call api before dev-login completes; wait until both token and serverId are ready.
     // (Waiting only for token would send requests with empty x-server-id, causing empty data on first load, e.g. AgentProfile.)
     for (let i = 0; i < 60 && (!tokenRef.current || !sidRef.current); i++) await new Promise((r) => setTimeout(r, 30));
     const r = await fetch(path, { method, headers: { "content-type": "application/json", authorization: "Bearer " + tokenRef.current, "x-server-id": sidRef.current }, body: body ? JSON.stringify(body) : undefined });
+    if (r.status === 401 && import.meta.env.VITE_LAZYCAT_SSO === "true") expireSession();
     return r.json();
   };
   const reload = async () => {
@@ -241,6 +248,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // A LazyCat account can be switched outside this page while the browser still holds the old
+  // application JWT. Revalidate on focus/visibility and periodically; the backend binds the JWT
+  // to X-HC-User-ID, so a mismatch clears cached state and returns to the authorization screen.
+  useEffect(() => {
+    if (authState !== "authed" || import.meta.env.VITE_LAZYCAT_SSO !== "true") return;
+    let checking = false;
+    const validate = async () => {
+      if (checking || !tokenRef.current) return;
+      checking = true;
+      try {
+        const response = await fetch("/api/auth/me", {
+          headers: { authorization: "Bearer " + tokenRef.current },
+        });
+        if (response.status === 401) expireSession();
+      } finally {
+        checking = false;
+      }
+    };
+    const onVisibility = () => { if (document.visibilityState === "visible") void validate(); };
+    window.addEventListener("focus", validate);
+    document.addEventListener("visibilitychange", onVisibility);
+    const timer = window.setInterval(validate, 15_000);
+    return () => {
+      window.removeEventListener("focus", validate);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.clearInterval(timer);
+    };
+  }, [authState]);
 
   // ── Workspace activation (runs on the initial pick + every client-side switch): load the active workspace's data and
   //    open a socket scoped to it. Resets all per-workspace state first so nothing leaks across a switch, and flips

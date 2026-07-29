@@ -11,11 +11,23 @@ export const users = pgTable("users", {
   displayName: text("display_name").notNull(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash"),           // for local login (nullable in PoC)
+  authProvider: text("auth_provider"),            // external identity provider, e.g. lazycat
+  authSubject: text("auth_subject"),              // stable provider subject (`sub`), never a display name
+  lazycatUid: text("lazycat_uid"),                // current identity injected by trusted lzc-ingress
+  lazycatRole: text("lazycat_role"),               // most recently observed ADMIN | NORMAL platform role
+  lazycatIsolatedAt: timestamp("lazycat_isolated_at", { withTimezone: true }), // one-time legacy default-workspace cleanup
   gravatarHash: text("gravatar_hash"),
   avatarUrl: text("avatar_url"),
   description: text("description"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (t) => ({
+  externalIdentityUniq: uniqueIndex("users_external_identity_uniq")
+    .on(t.authProvider, t.authSubject)
+    .where(sql`${t.authProvider} is not null and ${t.authSubject} is not null`),
+  lazycatUidUniq: uniqueIndex("users_lazycat_uid_uniq")
+    .on(t.lazycatUid)
+    .where(sql`${t.lazycatUid} is not null`),
+}));
 
 // ── Workspace (server) ────────────────────────────────────────
 export const servers = pgTable("servers", {

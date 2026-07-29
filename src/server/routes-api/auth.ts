@@ -1,7 +1,7 @@
 // Modified by f00700f for the community-maintained LazyCat distribution, 2026.
 // Auto-extracted from the former routes-api.ts monolith — bodies are verbatim.
 import type { BaseCtx, UserCtx } from "./ctx.js";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { db, schema } from "../../db/index.js";
 import { devLoginEnabled, hashPassword, isValidEmail, passwordError, safeEqual, setupToken, signUser, verifyPassword } from "../auth.js";
 import { DESC_TOO_LONG, createServer, descTooLong } from "../core.js";
@@ -22,17 +22,28 @@ interface LazycatAccountIdentity {
   isAdmin: boolean;
 }
 
-async function provisionLazycatAccount(identity: LazycatAccountIdentity) {
+async function provisionLazycatAccount(identity: LazycatAccountIdentity, ingressUid: string) {
   const email = lazycatEmail(identity.subject);
   const displayName = identity.displayName.slice(0, 128);
-  let user = (await db.select().from(schema.users).where(eq(schema.users.email, email)))[0];
+  const lazycatRole = identity.isAdmin ? "ADMIN" : "NORMAL";
+  let user = (await db.select().from(schema.users).where(and(
+    eq(schema.users.authProvider, "lazycat"),
+    eq(schema.users.authSubject, identity.subject),
+  )))[0];
+  if (!user) user = (await db.select().from(schema.users).where(eq(schema.users.lazycatUid, ingressUid)))[0];
+  if (!user) user = (await db.select().from(schema.users).where(eq(schema.users.email, email)))[0];
+  let previousLazycatRole = user?.lazycatRole ?? null;
   // Migrate accounts created by the previous ingress-header bridge. That implementation keyed
   // the synthetic email by username; OIDC correctly keys it by the stable `sub` claim.
   if (!user && identity.displayName !== identity.subject) {
     const legacyEmail = lazycatEmail(identity.displayName);
     const legacyUser = (await db.select().from(schema.users).where(eq(schema.users.email, legacyEmail)))[0];
     if (legacyUser) {
-      [user] = await db.update(schema.users).set({ email, displayName }).where(eq(schema.users.id, legacyUser.id)).returning();
+      [user] = await db.update(schema.users).set({
+        email, displayName, authProvider: "lazycat", authSubject: identity.subject,
+        lazycatUid: ingressUid, lazycatRole,
+      }).where(eq(schema.users.id, legacyUser.id)).returning();
+      previousLazycatRole = legacyUser.lazycatRole;
     }
   }
   const workspace = (await db.select().from(schema.servers).where(eq(schema.servers.slug, "open-tag")))[0];
@@ -45,32 +56,72 @@ async function provisionLazycatAccount(identity: LazycatAccountIdentity) {
     if (owner?.email === "you@open-tag.local" && !owner.passwordHash) {
       [user] = await db.update(schema.users).set({
         name: lazycatHandle(identity.subject), displayName, email,
+        authProvider: "lazycat", authSubject: identity.subject, lazycatUid: ingressUid, lazycatRole,
       }).where(eq(schema.users.id, owner.id)).returning();
     }
   }
   if (!user) {
     [user] = await db.insert(schema.users).values({
       name: lazycatHandle(identity.subject), displayName, email,
+      authProvider: "lazycat", authSubject: identity.subject, lazycatUid: ingressUid, lazycatRole,
     }).returning();
+  } else if (
+    user.authProvider !== "lazycat" ||
+    user.authSubject !== identity.subject ||
+    user.lazycatUid !== ingressUid ||
+    user.lazycatRole !== lazycatRole ||
+    user.displayName !== displayName
+  ) {
+    [user] = await db.update(schema.users).set({
+      displayName, authProvider: "lazycat", authSubject: identity.subject,
+      lazycatUid: ingressUid, lazycatRole,
+    }).where(eq(schema.users.id, user.id)).returning();
   }
 
   const membership = (await db.select().from(schema.serverMembers).where(and(
     eq(schema.serverMembers.serverId, workspace.id), eq(schema.serverMembers.userId, user!.id),
   )))[0];
-  const desiredRole = user!.id === workspace.ownerId ? "owner" : identity.isAdmin ? "admin" : "member";
-  if (!membership) {
-    await db.insert(schema.serverMembers).values({ serverId: workspace.id, userId: user!.id, role: desiredRole });
-  } else if (membership.role !== "owner" && membership.role !== desiredRole) {
-    await db.update(schema.serverMembers).set({ role: desiredRole }).where(and(
-      eq(schema.serverMembers.serverId, workspace.id), eq(schema.serverMembers.userId, user!.id),
-    ));
+  if (identity.isAdmin || user!.id === workspace.ownerId) {
+    const desiredRole = user!.id === workspace.ownerId ? "owner" : "admin";
+    if (!membership) {
+      await db.insert(schema.serverMembers).values({ serverId: workspace.id, userId: user!.id, role: desiredRole });
+    } else if (membership.role !== "owner" && membership.role !== desiredRole) {
+      await db.update(schema.serverMembers).set({ role: desiredRole }).where(and(
+        eq(schema.serverMembers.serverId, workspace.id), eq(schema.serverMembers.userId, user!.id),
+      ));
+    }
+    const all = (await db.select().from(schema.channels).where(and(
+      eq(schema.channels.serverId, workspace.id), eq(schema.channels.name, "all"),
+    )))[0];
+    if (all) await db.insert(schema.channelMembers).values({
+      channelId: all.id, memberType: "user", memberId: user!.id,
+    }).onConflictDoNothing();
+  } else {
+    // NORMAL LazyCat accounts are tenants, not automatic members of the seeded administrator
+    // workspace. Clean legacy auto-membership once (and whenever an ADMIN is demoted). The
+    // timestamp preserves a later explicit invitation made by a workspace administrator.
+    if (!user!.lazycatIsolatedAt || previousLazycatRole === "ADMIN") {
+      const seedChannels = await db.select({ id: schema.channels.id }).from(schema.channels)
+        .where(eq(schema.channels.serverId, workspace.id));
+      if (seedChannels.length) {
+        await db.delete(schema.channelMembers).where(and(
+          eq(schema.channelMembers.memberType, "user"),
+          eq(schema.channelMembers.memberId, user!.id),
+          inArray(schema.channelMembers.channelId, seedChannels.map((channel) => channel.id)),
+        ));
+      }
+      if (membership?.role !== "owner") {
+        await db.delete(schema.serverMembers).where(and(
+          eq(schema.serverMembers.serverId, workspace.id),
+          eq(schema.serverMembers.userId, user!.id),
+        ));
+      }
+      [user] = await db.update(schema.users).set({ lazycatIsolatedAt: new Date() })
+        .where(eq(schema.users.id, user!.id)).returning();
+    }
+    const mine = (await db.select().from(schema.servers).where(eq(schema.servers.ownerId, user!.id)))[0];
+    if (!mine) await createServer(`${displayName}'s workspace`, `u-${user!.id.slice(0, 8)}`, user!.id);
   }
-  const all = (await db.select().from(schema.channels).where(and(
-    eq(schema.channels.serverId, workspace.id), eq(schema.channels.name, "all"),
-  )))[0];
-  if (all) await db.insert(schema.channelMembers).values({
-    channelId: all.id, memberType: "user", memberId: user!.id,
-  }).onConflictDoNothing();
   return user!;
 }
 
@@ -94,7 +145,9 @@ export async function handlePublicAuth(ctx: BaseCtx): Promise<boolean> {
     if (!lazycatOidcEnabled()) return (sendErr(res, 404, "not found"), true);
     try {
       const identity = await completeLazycatOidc(req, res, url);
-      const user = await provisionLazycatAccount(identity);
+      const ingressIdentity = lazycatIdentity(req);
+      if (!ingressIdentity) throw new Error("trusted LazyCat ingress identity missing");
+      const user = await provisionLazycatAccount(identity, ingressIdentity.uid);
       setLazycatCompletion(res, user.id);
       res.writeHead(302, { location: "/login?lazycat=complete" });
       res.end();
@@ -110,6 +163,10 @@ export async function handlePublicAuth(ctx: BaseCtx): Promise<boolean> {
     if (!userId) return (sendErr(res, 401, "LazyCat authorization expired", { code: "auth_lazycat_expired" }), true);
     const user = (await db.select().from(schema.users).where(eq(schema.users.id, userId)))[0];
     if (!user) return (sendErr(res, 401, "LazyCat account unavailable", { code: "auth_lazycat_account_unavailable" }), true);
+    const ingressIdentity = lazycatIdentity(req);
+    if (!ingressIdentity || user.lazycatUid !== ingressIdentity.uid) {
+      return (sendErr(res, 401, "LazyCat account changed", { code: "auth_lazycat_account_changed" }), true);
+    }
     return (sendJson(res, 200, {
       token: signUser(user.id),
       user: { id: user.id, name: user.name, displayName: user.displayName, email: user.email },
@@ -140,7 +197,7 @@ export async function handlePublicAuth(ctx: BaseCtx): Promise<boolean> {
         subject: identity.uid,
         displayName: identity.uid,
         isAdmin: identity.role === "ADMIN",
-      });
+      }, identity.uid);
     } catch {
       return (sendErr(res, 503, "workspace not initialized"), true);
     }

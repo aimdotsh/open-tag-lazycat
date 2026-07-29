@@ -20,6 +20,14 @@ export function lazycatIdentity(req: IncomingMessage): LazycatIdentity | null {
   return { uid, role };
 }
 
+export function matchesLazycatSession(
+  enabled: boolean,
+  ingressUid: string | null,
+  boundUid: string | null,
+): boolean {
+  return !enabled || (!!ingressUid && !!boundUid && ingressUid === boundUid);
+}
+
 export function lazycatEmail(uid: string): string {
   return `lazycat.${crypto.createHash("sha256").update(uid).digest("hex").slice(0, 24)}@open-tag.local`;
 }

@@ -1,7 +1,7 @@
 # 懒猫商店上架资料
 
 > 对应包 ID：`f00700f.open-tag`
-> 对应应用版本：`1.0.18`
+> 对应应用版本：`1.0.19`
 > 对应 daemon：`@f00700f/open-tag-daemon@0.9.1`（由应用自托管）
 
 ## 应用简介
@@ -92,7 +92,7 @@ OpenAI、GitHub 或其他运行时提供方的认可或背书。
 3. 在 LightOS 执行动态生成的一键命令，确认 daemon tgz 返回 200，且 URL
    使用审核盒子的实际域名。
 4. 创建测试频道、消息、任务和 Agent；重启应用后确认数据仍存在。
-5. 从旧 LPK 升级到 `1.0.18`，确认 PostgreSQL、附件、OIDC 身份映射和
+5. 从旧 LPK 升级到 `1.0.19`，确认 PostgreSQL、附件、OIDC 身份映射和
    stable secret 均未变化。
 6. 检查 `/downloads/f00700f-open-tag-daemon-0.9.1.tgz` 只包含可公开发布
    的 daemon、许可证和说明文件，不含任何 key。

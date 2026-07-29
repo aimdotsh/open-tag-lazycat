@@ -17,7 +17,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "../../db/index.js";
 import { sendErr, bearer, serverIdHeader } from "../util.js";
-import { verifyUser } from "../auth.js";
+import { resolveUserSession } from "../userSession.js";
 import type { BaseCtx, UserCtx, ServerCtx } from "./ctx.js";
 import { handlePublicAuth, handleAuthedAuth } from "./auth.js";
 import { handlePublicAttachmentGet, handleAttachments } from "./attachments.js";
@@ -38,7 +38,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, url: 
   if (await handlePublicAttachmentGet(base)) return true;
 
   // ---- gate 1: require a logged-in user ----
-  const userId = verifyUser(bearer(req));
+  const userId = await resolveUserSession(req, bearer(req));
   if (!userId) return (sendErr(res, 401, "unauthorized"), true);
   const user: UserCtx = { ...base, userId };
   if (await handleAuthedAuth(user)) return true;

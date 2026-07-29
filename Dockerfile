@@ -31,6 +31,7 @@ COPY --from=build /app/docs-site/dist ./docs-site/dist
 COPY --from=build /app/src ./src
 # daemon package.json: read at runtime for latestDaemonVersion (system-alert "outdated daemon" check); only the manifest is needed.
 COPY --from=build /app/packages/daemon/package.json ./packages/daemon/package.json
+COPY --from=build /app/scripts/wait-for-postgres.mjs ./scripts/wait-for-postgres.mjs
 COPY --from=build /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=build /app/tsconfig.json ./tsconfig.json
 COPY --from=build /app/package.json ./package.json

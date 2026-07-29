@@ -55,7 +55,7 @@ services:
       retries: 20
 
   opentag:
-    image: registry.lazycat.cloud/f007/f00700f/open-tag-lazycat:577d74e433552bd5
+    image: registry.lazycat.cloud/f007/f00700f/open-tag-lazycat:39bd72453971e326
     depends_on:
       - postgres
       - redis
@@ -73,6 +73,7 @@ services:
       - OPEN_TAG_HOME=/home/node/.open-tag
       - OPEN_TAG_UPLOAD_DIR=/home/node/.open-tag/uploads
       - ALLOW_DEV_LOGIN=false
+      - LAZYCAT_SSO_ENABLED=true
       - LAZYCAT_OIDC_ENABLED=true
       - LAZYCAT_OIDC_ISSUER=${LAZYCAT_AUTH_OIDC_ISSUER_URI}
       - LAZYCAT_OIDC_CLIENT_ID=${LAZYCAT_AUTH_OIDC_CLIENT_ID}
